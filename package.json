@@ -1,0 +1,51 @@
+{
+  "name": "pi-extension-architect",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pi extension that guides architectural thinking before implementation.",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "architect"
+  ],
+  "scripts": {
+    "check": "npm run typecheck && npm test",
+    "pack:dry-run": "npm pack --dry-run",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-ai": {
+      "optional": true
+    },
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    },
+    "@mariozechner/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.71.0",
+    "@mariozechner/pi-coding-agent": "^0.71.0",
+    "@mariozechner/pi-tui": "^0.71.0",
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
