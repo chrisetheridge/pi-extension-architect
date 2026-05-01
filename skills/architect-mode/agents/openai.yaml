@@ -1,0 +1,7 @@
+interface:
+  display_name: "Architect Mode"
+  short_description: "Socratic design gate for architectural work"
+  default_prompt: "Use $architect-mode to classify the request, run the Socratic design gate, critique the design, generate options, and only then proceed to implementation."
+
+policy:
+  allow_implicit_invocation: false
