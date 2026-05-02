@@ -81,14 +81,14 @@ export function shouldEnterArchitectMode(taskType: TaskType, config: ArchitectCo
 
 export function buildArchitectEntryReason(taskType: TaskType, source: "manual" | "automatic"): string {
   if (source === "manual") {
-    return "You started Architect Mode manually, so the extension will slow the work down and force an architecture pass before implementation.";
+    return "You started Architect Mode manually, let's spend time working through your problem.";
   }
 
   if (taskType === "architectural") {
-    return "This request looks architectural, so the extension is collecting design context before implementation starts.";
+    return "This request looks architectural, let's spend time working through it before I write code.";
   }
 
-  return "This request was treated as ambiguous, so the extension is asking for design context before it allows implementation.";
+  return "This request was treated as ambiguous, let's spend time working through it before I write code.";
 }
 
 export function parseArchitectCommandArgs(args: string): ArchitectCommandAction {

@@ -250,17 +250,11 @@ async function runArchitectMode(
     buildReviewPrompt(originalPrompt, answers),
   );
 
-  pi.sendMessage(
-    {
-      customType: "architect-review",
-      content: `Architect review\n\n${reviewFeedback}`,
-      display: true,
-    },
-    { triggerTurn: false },
-  );
+  showReviewWidget(ctx, reviewFeedback);
 
   const followUpAnswers = await askReviewFollowUp(ctx);
   if (followUpAnswers === null) {
+    clearReviewWidget(ctx);
     state.locked = false;
     updateStatus(ctx, state);
     persist(pi, state, { prompt: originalPrompt, phase: "cancelled" });
@@ -274,11 +268,13 @@ async function runArchitectMode(
     "Generating architecture options...",
     buildOptionsPrompt(originalPrompt, answers, reviewFeedback, followUpAnswers),
   );
+  clearReviewWidget(ctx);
   const options = parseArchitectureOptions(optionText);
   const finalOptions = options.length > 0 ? options : fallbackArchitectureOptions();
 
   const selected = await chooseApproach(ctx, finalOptions);
   if (!selected) {
+    clearReviewWidget(ctx);
     state.locked = false;
     updateStatus(ctx, state);
     persist(pi, state, { prompt: originalPrompt, phase: "cancelled" });
@@ -336,9 +332,13 @@ async function collectSocraticAnswers(
     const question = QUESTIONS[index];
     if (!question) break;
 
+    updateProgressWidget(ctx, question, index, answers);
     const existing = answers[index]?.answer ?? "";
     const result = await askSocraticQuestion(ctx, question, index, answers, existing, entryReason);
-    if (!result) return null;
+    if (!result) {
+      ctx.ui.setWidget("architect", undefined);
+      return null;
+    }
     if (result.action === "back") {
       index = Math.max(0, index - 1);
       continue;
@@ -968,6 +968,14 @@ function updateProgressWidget(
     question.title,
     question.prompt,
   ]);
+}
+
+function showReviewWidget(ctx: ExtensionContext, reviewFeedback: string): void {
+  ctx.ui.setWidget("architect-review", (_tui, theme) => new ReviewMessageComponent(theme, `Architect review\n\n${reviewFeedback}`));
+}
+
+function clearReviewWidget(ctx: ExtensionContext): void {
+  ctx.ui.setWidget("architect-review", undefined);
 }
 
 function persist(pi: ExtensionAPI, state: RuntimeState, data: Record<string, unknown>): void {
