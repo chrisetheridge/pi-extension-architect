@@ -116,6 +116,22 @@ describe("prompt builders", () => {
     expect(prompt).toContain("Answer: Ship configurable prompts.");
   });
 
+  it("appends architecture guidance to the review prompt when provided", () => {
+    const prompt = buildReviewPrompt(
+      {
+        originalPrompt: "Build auth",
+        answers,
+        architectureGuidance: "Prefer boring infrastructure.",
+      },
+      "Task={{originalPrompt}}",
+    );
+
+    expect(prompt).toBe(`Task=Build auth
+
+Repository architecture guidance:
+Prefer boring infrastructure.`);
+  });
+
   it("builds the options prompt from a template", () => {
     expect(
       buildOptionsPrompt(

@@ -52,6 +52,7 @@ import {
 import { buildProgressDots, centerBox, clampContentWidth } from "./ui-format.js";
 
 const execFileAsync = promisify(execFile);
+const ARCHITECTURE_GUIDANCE_FILE = "ARCHITECTURE_GUIDANCE.md";
 
 const QUESTIONS: SocraticQuestion[] = [
   {
@@ -253,11 +254,12 @@ async function runArchitectMode(
 
   const config = await loadConfig(process.cwd());
   const reviewPromptTemplate = await resolvePromptTemplate(ctx, process.cwd(), config, "review");
+  const architectureGuidance = await loadArchitectureGuidance(ctx, process.cwd());
   const reviewFeedback = await runModelStep(
     ctx,
     config,
     "Reviewing design...",
-    buildReviewPrompt({ originalPrompt, answers }, reviewPromptTemplate),
+    buildReviewPrompt({ originalPrompt, answers, architectureGuidance }, reviewPromptTemplate),
   );
 
   showReviewWidget(ctx, reviewFeedback);
@@ -934,6 +936,23 @@ function resolvePromptPath(cwd: string, value: string): string {
   if (value === "~") return process.env.HOME ?? value;
   if (value.startsWith("~/")) return path.join(process.env.HOME ?? cwd, value.slice(2));
   return path.isAbsolute(value) ? value : path.resolve(cwd, value);
+}
+
+async function loadArchitectureGuidance(ctx: ExtensionContext, cwd: string): Promise<string | undefined> {
+  const guidancePath = path.join(cwd, ARCHITECTURE_GUIDANCE_FILE);
+  try {
+    return await readFile(guidancePath, "utf8");
+  } catch (error) {
+    if (isNotFoundError(error)) return undefined;
+
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(`Could not read ${ARCHITECTURE_GUIDANCE_FILE}; continuing without repository architecture guidance. ${message}`, "warning");
+    return undefined;
+  }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 async function getRepoContext(cwd: string): Promise<string> {

@@ -10,6 +10,7 @@ export interface ClassifierPromptInput {
 export interface ReviewPromptInput {
   originalPrompt: string;
   answers: SocraticAnswer[];
+  architectureGuidance?: string;
 }
 
 export interface OptionsPromptInput {
@@ -90,10 +91,11 @@ export function buildClassifierPrompt(input: ClassifierPromptInput, template = D
 }
 
 export function buildReviewPrompt(input: ReviewPromptInput, template = DEFAULT_PROMPT_TEMPLATES.review): string {
-  return renderPromptTemplate(template, {
+  const prompt = renderPromptTemplate(template, {
     originalPrompt: input.originalPrompt,
     answers: formatAnswers(input.answers),
   });
+  return appendArchitectureGuidance(prompt, input.architectureGuidance);
 }
 
 export function buildOptionsPrompt(input: OptionsPromptInput, template = DEFAULT_PROMPT_TEMPLATES.options): string {
@@ -111,4 +113,10 @@ export function formatAnswers(answers: SocraticAnswer[]): string {
 
 export function renderPromptTemplate(template: string, variables: Record<string, string>): string {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key: string) => variables[key] ?? match);
+}
+
+function appendArchitectureGuidance(prompt: string, architectureGuidance: string | undefined): string {
+  const guidance = architectureGuidance?.trim();
+  if (!guidance) return prompt;
+  return `${prompt.trimEnd()}\n\nRepository architecture guidance:\n${guidance}`;
 }

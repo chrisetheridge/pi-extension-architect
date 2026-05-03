@@ -55,6 +55,8 @@ Supported template variables:
 - `review`: `{{originalPrompt}}`, `{{answers}}`
 - `options`: `{{originalPrompt}}`, `{{answers}}`, `{{reviewFeedback}}`, `{{followUpAnswers}}`
 
+If the active project root contains `ARCHITECTURE_GUIDANCE.md`, its contents are appended to the review prompt so critiques can account for repository-specific architecture rules.
+
 ## What It Saves
 
 After an approach is selected, the extension writes the decision record to:
