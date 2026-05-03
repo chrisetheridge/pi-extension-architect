@@ -11,6 +11,12 @@ import {
   shouldEnterArchitectMode,
   slugifyPlanName,
 } from "../src/core.js";
+import {
+  buildClassifierPrompt,
+  buildOptionsPrompt,
+  buildReviewPrompt,
+  renderPromptTemplate,
+} from "../src/prompts.js";
 import { buildProgressDots, centerBox, clampContentWidth } from "../src/ui-format.js";
 
 describe("core helpers", () => {
@@ -28,6 +34,20 @@ describe("core helpers", () => {
   it("honors ambiguous trigger config", () => {
     expect(shouldEnterArchitectMode("ambiguous", normalizeConfig({ autoTriggerAmbiguous: false }))).toBe(false);
     expect(shouldEnterArchitectMode("ambiguous", normalizeConfig({ autoTriggerAmbiguous: true }))).toBe(true);
+  });
+
+  it("preserves configured prompt templates", () => {
+    const config = normalizeConfig({
+      prompts: {
+        classifier: "./prompts/classifier.md",
+        review: "Review {{originalPrompt}}",
+        options: "Options {{answers}}",
+      },
+    });
+
+    expect(config.prompts?.classifier).toBe("./prompts/classifier.md");
+    expect(config.prompts?.review).toBe("Review {{originalPrompt}}");
+    expect(config.prompts?.options).toBe("Options {{answers}}");
   });
 
   it("parses architecture options from JSON", () => {
@@ -70,5 +90,49 @@ describe("core helpers", () => {
     expect(clampContentWidth(120)).toBe(96);
     expect(clampContentWidth(40)).toBe(36);
     expect(centerBox(20, 10)).toBe("     ");
+  });
+});
+
+describe("prompt builders", () => {
+  const answers = [
+    {
+      questionId: "problem",
+      title: "Problem",
+      prompt: "What is the goal?",
+      answer: "Ship configurable prompts.",
+    },
+  ];
+
+  it("builds the classifier prompt from a template", () => {
+    expect(buildClassifierPrompt({ prompt: "Build auth", repoContext: "files: src/" }, "{{prompt}}\n{{repoContext}}")).toBe(
+      "Build auth\nfiles: src/",
+    );
+  });
+
+  it("builds the review prompt from a template", () => {
+    const prompt = buildReviewPrompt({ originalPrompt: "Build auth", answers }, "Task={{originalPrompt}}\nAnswers={{answers}}");
+
+    expect(prompt).toContain("Task=Build auth");
+    expect(prompt).toContain("Answer: Ship configurable prompts.");
+  });
+
+  it("builds the options prompt from a template", () => {
+    expect(
+      buildOptionsPrompt(
+        {
+          originalPrompt: "Build auth",
+          answers,
+          reviewFeedback: "Clarify storage.",
+          followUpAnswers: "",
+        },
+        "{{originalPrompt}}|{{reviewFeedback}}|{{followUpAnswers}}",
+      ),
+    ).toBe("Build auth|Clarify storage.|(none)");
+  });
+
+  it("leaves unknown template variables untouched", () => {
+    expect(renderPromptTemplate("Known {{known}} unknown {{missing}}", { known: "yes" })).toBe(
+      "Known yes unknown {{missing}}",
+    );
   });
 });

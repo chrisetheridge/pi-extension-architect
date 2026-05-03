@@ -3,8 +3,15 @@ export type TaskType = "trivial" | "implementation" | "architectural" | "ambiguo
 export interface ArchitectConfig {
   classifierModel?: string;
   architectModel?: string;
+  prompts?: ArchitectPromptConfig;
   autoTriggerAmbiguous: boolean;
   savePlans: boolean;
+}
+
+export interface ArchitectPromptConfig {
+  classifier?: string;
+  review?: string;
+  options?: string;
 }
 
 export interface SocraticQuestion {

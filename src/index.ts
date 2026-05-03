@@ -40,6 +40,15 @@ import type {
   SocraticQuestion,
   TaskType,
 } from "./types.js";
+import {
+  DEFAULT_PROMPT_TEMPLATES,
+  SYSTEM_PROMPTS,
+  buildClassifierPrompt,
+  buildOptionsPrompt,
+  buildReviewPrompt,
+  formatAnswers,
+  type PromptName,
+} from "./prompts.js";
 import { buildProgressDots, centerBox, clampContentWidth } from "./ui-format.js";
 
 const execFileAsync = promisify(execFile);
@@ -243,11 +252,12 @@ async function runArchitectMode(
   }
 
   const config = await loadConfig(process.cwd());
+  const reviewPromptTemplate = await resolvePromptTemplate(ctx, process.cwd(), config, "review");
   const reviewFeedback = await runModelStep(
     ctx,
     config,
     "Reviewing design...",
-    buildReviewPrompt(originalPrompt, answers),
+    buildReviewPrompt({ originalPrompt, answers }, reviewPromptTemplate),
   );
 
   showReviewWidget(ctx, reviewFeedback);
@@ -262,11 +272,12 @@ async function runArchitectMode(
     return;
   }
 
+  const optionsPromptTemplate = await resolvePromptTemplate(ctx, process.cwd(), config, "options");
   const optionText = await runModelStep(
     ctx,
     config,
     "Generating architecture options...",
-    buildOptionsPrompt(originalPrompt, answers, reviewFeedback, followUpAnswers),
+    buildOptionsPrompt({ originalPrompt, answers, reviewFeedback, followUpAnswers }, optionsPromptTemplate),
   );
   clearReviewWidget(ctx);
   const options = parseArchitectureOptions(optionText);
@@ -789,27 +800,14 @@ function createEditorTheme(theme: Theme): EditorTheme {
 
 async function classifyTask(ctx: ExtensionContext, config: ArchitectConfig, prompt: string, cwd: string): Promise<TaskType> {
   const repoContext = await getRepoContext(cwd);
-  const classifierPrompt = `Classify this Pi coding-agent user request.
-
-Return ONLY JSON: {"taskType":"trivial"|"implementation"|"architectural"|"ambiguous","reason":"short"}
-
-Definitions:
-- trivial: explanation, reading, typo, tiny mechanical edit
-- implementation: straightforward code change with local scope
-- architectural: needs system design, significant structure, tradeoffs, data flow, reliability, scalability, security, or from-scratch feature planning
-- ambiguous: not enough information
-
-User request:
-${prompt}
-
-Repo context:
-${repoContext}`;
+  const classifierPromptTemplate = await resolvePromptTemplate(ctx, cwd, config, "classifier");
+  const classifierPrompt = buildClassifierPrompt({ prompt, repoContext }, classifierPromptTemplate);
 
   const model = await resolveConfiguredModel(ctx, config.classifierModel, ctx.model);
   if (!model) return heuristicClassify(prompt);
 
   try {
-    const text = await completeWithModel(ctx, model, "You are a strict task classifier.", classifierPrompt);
+    const text = await completeWithModel(ctx, model, SYSTEM_PROMPTS.classifier, classifierPrompt);
     return parseTaskType(text) ?? heuristicClassify(prompt);
   } catch {
     return heuristicClassify(prompt);
@@ -828,14 +826,14 @@ async function runModelStep(
   }
 
   if (!ctx.hasUI) {
-    return completeWithModel(ctx, model, "You are an architecture reviewer.", prompt);
+    return completeWithModel(ctx, model, SYSTEM_PROMPTS.architectReviewer, prompt);
   }
 
   const result = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
     const loader = new BorderedLoader(tui, theme, `${label} (${model.id})`);
     loader.onAbort = () => done(null);
 
-    completeWithModel(ctx, model, "You are an architecture reviewer and Socratic design coach.", prompt, loader.signal)
+    completeWithModel(ctx, model, SYSTEM_PROMPTS.architectCoach, prompt, loader.signal)
       .then(done)
       .catch((error: unknown) => done(`Model step failed: ${error instanceof Error ? error.message : String(error)}`));
 
@@ -903,6 +901,39 @@ async function loadConfig(cwd: string): Promise<ArchitectConfig> {
   } catch {
     return normalizeConfig(undefined);
   }
+}
+
+async function resolvePromptTemplate(
+  ctx: ExtensionContext,
+  cwd: string,
+  config: ArchitectConfig,
+  name: PromptName,
+): Promise<string> {
+  const configured = config.prompts?.[name];
+  if (typeof configured !== "string") return DEFAULT_PROMPT_TEMPLATES[name];
+
+  const source = configured.trim();
+  if (!source) return DEFAULT_PROMPT_TEMPLATES[name];
+  if (!isPromptFileReference(source)) return configured;
+
+  const promptPath = resolvePromptPath(cwd, source);
+  try {
+    return await readFile(promptPath, "utf8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ctx.ui.notify(`Could not read Architect ${name} prompt at ${promptPath}; using built-in prompt. ${message}`, "warning");
+    return DEFAULT_PROMPT_TEMPLATES[name];
+  }
+}
+
+function isPromptFileReference(value: string): boolean {
+  return value.endsWith(".md") || value.startsWith("./") || value.startsWith("../") || value.startsWith("/") || value.startsWith("~");
+}
+
+function resolvePromptPath(cwd: string, value: string): string {
+  if (value === "~") return process.env.HOME ?? value;
+  if (value.startsWith("~/")) return path.join(process.env.HOME ?? cwd, value.slice(2));
+  return path.isAbsolute(value) ? value : path.resolve(cwd, value);
 }
 
 async function getRepoContext(cwd: string): Promise<string> {
@@ -1022,56 +1053,6 @@ function stripPromptEcho(text: string, prompt: string): string {
   return text.startsWith(prompt) ? text.slice(prompt.length).trim() : text;
 }
 
-function buildReviewPrompt(originalPrompt: string, answers: SocraticAnswer[]): string {
-  return `The user wants to implement this task:
-${originalPrompt}
-
-They answered these architecture questions:
-${formatAnswers(answers)}
-
-Critique their thinking in a Socratic style.
-
-Requirements:
-- Identify missing constraints, flawed assumptions, hidden complexity, failure modes, and scalability risks.
-- Ask probing follow-up questions.
-- Do NOT generate implementation.
-- Do NOT choose a final solution.
-- Be concise but specific.`;
-}
-
-function buildOptionsPrompt(
-  originalPrompt: string,
-  answers: SocraticAnswer[],
-  reviewFeedback: string,
-  followUpAnswers: string,
-): string {
-  return `Generate 2-3 architecture options for this task.
-
-Original task:
-${originalPrompt}
-
-User design answers:
-${formatAnswers(answers)}
-
-Review feedback:
-${reviewFeedback}
-
-User refinements:
-${followUpAnswers || "(none)"}
-
-Return JSON only:
-{
-  "options": [
-    {
-      "id": "simple",
-      "title": "Option A - Simple / Fast to Build",
-      "summary": "one sentence",
-      "details": "High-level structure, components, data flow, tradeoffs, failure modes, complexity level."
-    }
-  ]
-}`;
-}
-
 function buildImplementationContext(decision: ArchitectDecision): string {
   return `[ARCHITECT MODE CONTEXT]
 The user completed Architect Mode before implementation.
@@ -1131,8 +1112,4 @@ ${decision.options.map((option) => `### ${option.title}\n\n${option.details}`).j
 
 ${decision.selectedApproachDetails}
 `;
-}
-
-function formatAnswers(answers: SocraticAnswer[]): string {
-  return answers.map((answer) => `### ${answer.title}\n\nQuestion: ${answer.prompt}\n\nAnswer: ${answer.answer}`).join("\n\n");
 }
